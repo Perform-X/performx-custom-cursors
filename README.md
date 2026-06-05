@@ -36,4 +36,3 @@ For configuration details and setup guidelines, please explore our live portal:
 
 ## Developed By
 This utility is actively maintained by <a href="https://performx.me/" target="_blank" rel="noopener">PerformX Performance Marketing Exodos</a>. Visit our site to explore more web optimization utilities and digital performance growth frameworks.
-

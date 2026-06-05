@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PerformX Custom Cursors
  * Plugin URI: https://performx.me/
- * Description: Adds a modern, smooth-trailing animated custom cursor with latest style configurations.
+ * Description: Adds a modern, smooth-trailing animated custom cursor with secure admin style configurations.
  * Version: 1.0.1
  * Author: PerformX Performance Marketing Exodos
  * Author URI: https://performx.me/
@@ -12,22 +12,7 @@
 if (!defined('ABSPATH')) { exit; }
 
 /**
- * 1. COMPATIBILITY ENGINE: Blocks loaders inside Page Builders
- */
-function pcc_is_builder_active() {
-    if (did_action('elementor/loaded')) {
-        if (\Elementor\Plugin::$instance->editor->is_edit_mode() || isset($_GET['elementor-preview'])) {
-            return true;
-        }
-    }
-    if (is_admin() || (function_exists('is_gutenberg_page') && is_gutenberg_page())) {
-        return true;
-    }
-    return false;
-}
-
-/**
- * 2. SECURE ADMINISTRATIVE DASHBOARD MENU SETUP
+ * 1. SECURE ADMINISTRATIVE DASHBOARD MENU SETUP
  */
 add_action('admin_menu', 'pcc_create_settings_menu');
 function pcc_create_settings_menu() {
@@ -101,13 +86,28 @@ function pcc_render_settings_page() {
 }
 
 /**
+ * 2. COMPATIBILITY CHECK ENGINE (Evaluated at injection run-time)
+ */
+function pcc_should_load_cursor() {
+    // Block injection inside core WordPress Admin Screens or Gutenberg Block Editor views
+    if (is_admin()) { return false; }
+
+    // Block injection inside Elementor Editor Workspace framework views
+    if (class_exists('\Elementor\Plugin')) {
+        if (\Elementor\Plugin::$instance->editor->is_edit_mode() || \Elementor\Plugin::$instance->preview->is_preview_mode() || isset($_GET['elementor-preview'])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
  * 3. FRONTEND INJECTION ENGINE (SECURELY ESCAPED & INTEGRITY ASSURED)
  */
-add_action('wp_enqueue_scripts', 'pcc_enqueue_frontend_assets');
+add_action('wp_enqueue_scripts', 'pcc_enqueue_frontend_assets', 9999); // Late execution priority avoids theme override conflicts
 function pcc_enqueue_frontend_assets() {
-    if (pcc_is_builder_active()) { return; }
+    if (!pcc_should_load_cursor()) { return; }
 
-    // Double-sanitizing output vars to block text-encoding exploits or database manipulation
     $color = sanitize_hex_color(get_option('pcc_cursor_color', '#ff4757'));
     $shape = sanitize_key(get_option('pcc_cursor_shape', 'classic-circle'));
 
@@ -127,19 +127,13 @@ function pcc_enqueue_frontend_assets() {
     ";
     wp_add_inline_style('wp-block-library', $custom_css);
 
-    // CACHE INVALIDATION: 1.0.1 tag automatically handles LiteSpeed, Cloudflare, and local storage cache resets
-    wp_enqueue_script(
-        'pcc-script', 
-        plugin_dir_url(__FILE__) . 'cursor.js', 
-        array(), 
-        '1.0.1', // Incremented version tag strips out stale cached browser copies
-        true
-    );
+    // CACHE INVALIDATION: version tag handles LiteSpeed and local cache resets automatically
+    wp_enqueue_script('pcc-script', plugin_dir_url(__FILE__) . 'cursor.js', array(), '1.0.1', true);
 }
 
 add_action('wp_footer', 'pcc_inject_structural_markup');
 function pcc_inject_structural_markup() {
-    if (pcc_is_builder_active()) { return; }
+    if (!pcc_should_load_cursor()) { return; }
     echo '<div class="pcc-cursor-dot" id="pccDot"></div>';
     echo '<div class="pcc-cursor-outline" id="pccOutline"></div>';
 }
