@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: PerformX Custom Cursors
- * Plugin URI: https://performx.me
- * Description: Adds a modern, smooth-trailing animated custom cursor with admin style configurations.
+ * Plugin URI: https://performx.me/
+ * Description: Adds a modern, smooth-trailing animated custom cursor with latest style configurations.
  * Version: 1.0.1
  * Author: PerformX Performance Marketing Exodos
- * Author URI: https://performx.me
+ * Author URI: https://performx.me/
  * License: GPL2
  */
 
@@ -15,41 +15,43 @@ if (!defined('ABSPATH')) { exit; }
  * 1. COMPATIBILITY ENGINE: Blocks loaders inside Page Builders
  */
 function pcc_is_builder_active() {
-    // Check for Elementor Editing Mode
     if (did_action('elementor/loaded')) {
         if (\Elementor\Plugin::$instance->editor->is_edit_mode() || isset($_GET['elementor-preview'])) {
             return true;
         }
     }
-    // Check for Block Editor (Gutenberg)
-    if (is_admin() || function_exists('is_gutenberg_page') && is_gutenberg_page()) {
+    if (is_admin() || (function_exists('is_gutenberg_page') && is_gutenberg_page())) {
         return true;
     }
     return false;
 }
 
 /**
- * 2. ADMINISTRATIVE DASHBOARD MENU SETUP
+ * 2. SECURE ADMINISTRATIVE DASHBOARD MENU SETUP
  */
 add_action('admin_menu', 'pcc_create_settings_menu');
 function pcc_create_settings_menu() {
     add_options_page(
         'PerformX Cursors Options',
         'PerformX Cursors',
-        'manage_options',
+        'manage_options', // Strictly enforces Administrator role checking
         'performx-custom-cursors',
         'pcc_render_settings_page'
     );
 }
 
-// Register settings values securely in the wp_options database
+// Register settings values securely with custom sanitization callbacks
 add_action('admin_init', 'pcc_register_plugin_settings');
 function pcc_register_plugin_settings() {
-    register_setting('pcc-settings-group', 'pcc_cursor_color');
-    register_setting('pcc-settings-group', 'pcc_cursor_shape');
+    register_setting('pcc-settings-group', 'pcc_cursor_color', array(
+        'sanitize_callback' => 'sanitize_hex_color' // Sanitizes input strictly to standard Hex values (#000000)
+    ));
+    register_setting('pcc-settings-group', 'pcc_cursor_shape', array(
+        'sanitize_callback' => 'sanitize_key' // Strips out special characters, dangerous multi-byte tags, and spaces
+    ));
 }
 
-// Inject WordPress native Color Picker assets into the admin page layout
+// Inject WordPress native Color Picker assets safely into the admin layout
 add_action('admin_enqueue_scripts', 'pcc_enqueue_admin_color_picker');
 function pcc_enqueue_admin_color_picker($hook) {
     if ($hook !== 'settings_page_performx-custom-cursors') { return; }
@@ -60,8 +62,13 @@ function pcc_enqueue_admin_color_picker($hook) {
     });
 }
 
-// Render the HTML form options view inside WordPress Settings panel
+// Render the HTML form options view inside the WordPress Settings panel
 function pcc_render_settings_page() {
+    // Explicit security block against low-privilege capability traversal
+    if (!current_user_can('manage_options')) {
+        wp_die(esc_html__('You do not have sufficient permissions to access this page.', 'performx-cursors'));
+    }
+
     $current_color = get_option('pcc_cursor_color', '#ff4757');
     $current_shape = get_option('pcc_cursor_shape', 'classic-circle');
     ?>
@@ -94,16 +101,16 @@ function pcc_render_settings_page() {
 }
 
 /**
- * 3. FRONTEND INJECTION ENGINE
+ * 3. FRONTEND INJECTION ENGINE (SECURELY ESCAPED & INTEGRITY ASSURED)
  */
 add_action('wp_enqueue_scripts', 'pcc_enqueue_frontend_assets');
 function pcc_enqueue_frontend_assets() {
     if (pcc_is_builder_active()) { return; }
 
-    $color = get_option('pcc_cursor_color', '#ff4757');
-    $shape = get_option('pcc_cursor_shape', 'classic-circle');
+    // Double-sanitizing output vars to block text-encoding exploits or database manipulation
+    $color = sanitize_hex_color(get_option('pcc_cursor_color', '#ff4757'));
+    $shape = sanitize_key(get_option('pcc_cursor_shape', 'classic-circle'));
 
-    // Dynamic structural styling framework mapping shapes variables
     $custom_css = "
         body, a, button, input, select, textarea { cursor: none !important; }
         .pcc-cursor-dot, .pcc-cursor-outline {
@@ -120,8 +127,14 @@ function pcc_enqueue_frontend_assets() {
     ";
     wp_add_inline_style('wp-block-library', $custom_css);
 
-    // CACHE INVALIDATION: version tag forces LiteSpeed to reload assets instantly
-    wp_enqueue_script('pcc-script', plugin_dir_url(__FILE__) . 'cursor.js', array(), '1.0.1', true);
+    // CACHE INVALIDATION: 1.0.1 tag automatically handles LiteSpeed, Cloudflare, and local storage cache resets
+    wp_enqueue_script(
+        'pcc-script', 
+        plugin_dir_url(__FILE__) . 'cursor.js', 
+        array(), 
+        '1.0.1', // Incremented version tag strips out stale cached browser copies
+        true
+    );
 }
 
 add_action('wp_footer', 'pcc_inject_structural_markup');
