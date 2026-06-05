@@ -1,66 +1,132 @@
 <?php
 /**
  * Plugin Name: PerformX Custom Cursors
- * Plugin URI: https://performx.me/
- * Description: Adds a modern, smooth-trailing animated custom cursor to your WordPress site.
- * Version: 1.0.0
+ * Plugin URI: https://performx.me
+ * Description: Adds a modern, smooth-trailing animated custom cursor with admin style configurations.
+ * Version: 1.0.1
  * Author: PerformX Performance Marketing Exodos
- * Author URI: https://performx.me/
+ * Author URI: https://performx.me
  * License: GPL2
  */
 
-// Exit if accessed directly.
-if (!defined('ABSPATH')) {
-    exit;
+if (!defined('ABSPATH')) { exit; }
+
+/**
+ * 1. COMPATIBILITY ENGINE: Blocks loaders inside Page Builders
+ */
+function pcc_is_builder_active() {
+    // Check for Elementor Editing Mode
+    if (did_action('elementor/loaded')) {
+        if (\Elementor\Plugin::$instance->editor->is_edit_mode() || isset($_GET['elementor-preview'])) {
+            return true;
+        }
+    }
+    // Check for Block Editor (Gutenberg)
+    if (is_admin() || function_exists('is_gutenberg_page') && is_gutenberg_page()) {
+        return true;
+    }
+    return false;
 }
 
-function pcc_enqueue_cursor_assets() {
-    // Inject the CSS directly into the site header for lightning-fast loading
+/**
+ * 2. ADMINISTRATIVE DASHBOARD MENU SETUP
+ */
+add_action('admin_menu', 'pcc_create_settings_menu');
+function pcc_create_settings_menu() {
+    add_options_page(
+        'PerformX Cursors Options',
+        'PerformX Cursors',
+        'manage_options',
+        'performx-custom-cursors',
+        'pcc_render_settings_page'
+    );
+}
+
+// Register settings values securely in the wp_options database
+add_action('admin_init', 'pcc_register_plugin_settings');
+function pcc_register_plugin_settings() {
+    register_setting('pcc-settings-group', 'pcc_cursor_color');
+    register_setting('pcc-settings-group', 'pcc_cursor_shape');
+}
+
+// Inject WordPress native Color Picker assets into the admin page layout
+add_action('admin_enqueue_scripts', 'pcc_enqueue_admin_color_picker');
+function pcc_enqueue_admin_color_picker($hook) {
+    if ($hook !== 'settings_page_performx-custom-cursors') { return; }
+    wp_enqueue_style('wp-color-picker');
+    wp_enqueue_script('pcc-admin-js', false, array('wp-color-picker'), false, true);
+    add_action('admin_footer', function() {
+        echo '<script>jQuery(document).ready(function($){ $(".pcc-color-field").wpColorPicker(); });</script>';
+    });
+}
+
+// Render the HTML form options view inside WordPress Settings panel
+function pcc_render_settings_page() {
+    $current_color = get_option('pcc_cursor_color', '#ff4757');
+    $current_shape = get_option('pcc_cursor_shape', 'classic-circle');
+    ?>
+    <div class="wrap">
+        <h1>PerformX Custom Cursors Configurations</h1>
+        <form method="post" action="options.php">
+            <?php settings_fields('pcc-settings-group'); ?>
+            <?php do_settings_sections('pcc-settings-group'); ?>
+            <table class="form-table">
+                <tr valign="top">
+                    <th scope="row">Cursor Theme Color</th>
+                    <td>
+                        <input type="text" name="pcc_cursor_color" value="<?php echo esc_attr($current_color); ?>" class="pcc-color-field" data-default-color="#ff4757" />
+                    </td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row">Cursor Geometric Shape</th>
+                    <td>
+                        <select name="pcc_cursor_shape">
+                            <option value="classic-circle" <?php selected($current_shape, 'classic-circle'); ?>>Classic Circle Pulse</option>
+                            <option value="cyber-square" <?php selected($current_shape, 'cyber-square'); ?>>Cyber Angular Square</option>
+                        </select>
+                    </td>
+                </tr>
+            </table>
+            <?php submit_button(); ?>
+        </form>
+    </div>
+    <?php
+}
+
+/**
+ * 3. FRONTEND INJECTION ENGINE
+ */
+add_action('wp_enqueue_scripts', 'pcc_enqueue_frontend_assets');
+function pcc_enqueue_frontend_assets() {
+    if (pcc_is_builder_active()) { return; }
+
+    $color = get_option('pcc_cursor_color', '#ff4757');
+    $shape = get_option('pcc_cursor_shape', 'classic-circle');
+
+    // Dynamic structural styling framework mapping shapes variables
     $custom_css = "
-        body, a, button, input, select, textarea {
-            cursor: none !important;
+        body, a, button, input, select, textarea { cursor: none !important; }
+        .pcc-cursor-dot, .pcc-cursor-outline {
+            position: fixed; transform: translate(-50%, -50%); z-index: 999999; pointer-events: none;
         }
-        .pcc-cursor-dot {
-            width: 8px;
-            height: 8px;
-            background-color: #ff4757;
-            position: fixed;
-            transform: translate(-50%, -50%);
-            border-radius: 50%;
-            z-index: 999999;
-            pointer-events: none;
-        }
+        .pcc-cursor-dot { width: 8px; height: 8px; background-color: {$color}; border-radius: " . ($shape === 'cyber-square' ? '0%' : '50%') . "; }
         .pcc-cursor-outline {
-            width: 40px;
-            height: 40px;
-            border: 2px solid #ff4757;
-            position: fixed;
-            transform: translate(-50%, -50%);
-            border-radius: 50%;
-            z-index: 999998;
-            pointer-events: none;
-            transition: transform 0.1s ease-out, width 0.2s, height 0.2s;
+            width: 40px; height: 40px; 
+            border: 2px solid {$color}; 
+            border-radius: " . ($shape === 'cyber-square' ? '0%' : '50%') . ";
+            transition: transform 0.1s ease-out, width 0.2s, height 0.2s, border-radius 0.2s;
         }
-        .pcc-cursor-hover {
-            width: 55px;
-            height: 55px;
-            background-color: rgba(213, 71, 87, 0.1);
-        }
+        .pcc-cursor-hover { width: 55px; height: 55px; background-color: rgba(255, 71, 87, 0.15); transform: translate(-50%, -50%) rotate(45deg); }
     ";
     wp_add_inline_style('wp-block-library', $custom_css);
 
-    wp_enqueue_script(
-        'pcc-cursor-script',
-        plugin_dir_url(__FILE__) . 'cursor.js',
-        array(),
-        '1.0.0',
-        true
-    );
+    // CACHE INVALIDATION: version tag forces LiteSpeed to reload assets instantly
+    wp_enqueue_script('pcc-script', plugin_dir_url(__FILE__) . 'cursor.js', array(), '1.0.1', true);
 }
-add_action('wp_enqueue_scripts', 'pcc_enqueue_cursor_assets');
 
-function pcc_inject_cursor_html() {
+add_action('wp_footer', 'pcc_inject_structural_markup');
+function pcc_inject_structural_markup() {
+    if (pcc_is_builder_active()) { return; }
     echo '<div class="pcc-cursor-dot" id="pccDot"></div>';
     echo '<div class="pcc-cursor-outline" id="pccOutline"></div>';
 }
-add_action('wp_footer', 'pcc_inject_cursor_html');
